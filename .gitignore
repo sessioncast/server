@@ -1,0 +1,19 @@
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# Logs
+*.log
+
+# Secrets
+.backup/
+agent-tokens.json
+
+# OS
+.DS_Store
+Thumbs.db
