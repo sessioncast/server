@@ -38,6 +38,12 @@ app:
     secret: ${JWT_SECRET:tmux-remote-super-secret-key-for-jwt-token-256bits}
     expiration-ms: 86400000  # 24 hours
 
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENV:production}
+  traces-sample-rate: 1.0
+  exception-resolver-order: -2147483647
+
 logging:
   level:
     root: WARN
