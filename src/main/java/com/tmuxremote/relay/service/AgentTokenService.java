@@ -1,15 +1,20 @@
 package com.tmuxremote.relay.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
 import java.io.IOException;
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
@@ -27,15 +32,30 @@ public class AgentTokenService {
     // ownerEmail -> Set<agentToken>
     private final Map<String, Set<String>> ownerToTokens = new ConcurrentHashMap<>();
 
+    // Cache for Platform API results with expiry time
+    private final Map<String, CachedToken> platformTokenCache = new ConcurrentHashMap<>();
+
     private final SecureRandom secureRandom = new SecureRandom();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${app.token-storage-path:./agent-tokens.json}")
     private String tokenStoragePath;
 
+    @Value("${app.platform-api-url:}")
+    private String platformApiUrl;
+
+    @Value("${app.platform-token-cache-ttl-minutes:30}")
+    private int cacheMinutes;
+
     @PostConstruct
     public void init() {
         loadTokensFromFile();
+        if (platformApiUrl != null && !platformApiUrl.isBlank()) {
+            log.info("Platform API integration enabled: {}", platformApiUrl);
+        } else {
+            log.warn("Platform API URL not configured - using local token storage only");
+        }
     }
 
     private void loadTokensFromFile() {
@@ -79,11 +99,67 @@ public class AgentTokenService {
     }
 
     public boolean validateToken(String token) {
-        return tokenToOwner.containsKey(token);
+        // Check local cache first
+        if (tokenToOwner.containsKey(token)) {
+            return true;
+        }
+        // Check Platform API
+        return getOwnerByToken(token).isPresent();
     }
 
     public Optional<String> getOwnerByToken(String token) {
-        return Optional.ofNullable(tokenToOwner.get(token));
+        // 1. Check local memory cache
+        String localOwner = tokenToOwner.get(token);
+        if (localOwner != null) {
+            return Optional.of(localOwner);
+        }
+
+        // 2. Check Platform API cache
+        CachedToken cached = platformTokenCache.get(token);
+        if (cached != null && !cached.isExpired()) {
+            if (cached.owner != null) {
+                return Optional.of(cached.owner);
+            }
+            return Optional.empty(); // Cached negative result
+        }
+
+        // 3. Call Platform API
+        if (platformApiUrl != null && !platformApiUrl.isBlank()) {
+            try {
+                String owner = validateTokenWithPlatformApi(token);
+                if (owner != null) {
+                    // Cache positive result
+                    platformTokenCache.put(token, new CachedToken(owner, cacheMinutes));
+                    log.debug("Token validated via Platform API: {}..., owner: {}",
+                            token.substring(0, Math.min(16, token.length())), owner);
+                    return Optional.of(owner);
+                } else {
+                    // Cache negative result for shorter time
+                    platformTokenCache.put(token, new CachedToken(null, 5));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to validate token with Platform API: {}", e.getMessage());
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private String validateTokenWithPlatformApi(String token) {
+        try {
+            String url = platformApiUrl + "/api/agent-tokens/validate/" + token;
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode json = objectMapper.readTree(response.getBody());
+                if (json.has("valid") && json.get("valid").asBoolean()) {
+                    return json.get("owner").asText();
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Platform API call failed: {}", e.getMessage());
+        }
+        return null;
     }
 
     public Set<String> getTokensByOwner(String ownerEmail) {
@@ -98,6 +174,7 @@ public class AgentTokenService {
             if (tokens != null) {
                 tokens.remove(token);
             }
+            platformTokenCache.remove(token);
             saveTokensToFile();
             log.info("Agent token revoked: {} by {}", token.substring(0, 12) + "...", ownerEmail);
             return true;
@@ -109,5 +186,24 @@ public class AgentTokenService {
         return getTokensByOwner(ownerEmail).stream()
                 .map(t -> t.substring(0, Math.min(t.length(), 16)) + "...")
                 .collect(Collectors.toSet());
+    }
+
+    // Clear expired cache entries periodically
+    public void cleanupCache() {
+        platformTokenCache.entrySet().removeIf(entry -> entry.getValue().isExpired());
+    }
+
+    private static class CachedToken {
+        final String owner;
+        final Instant expiry;
+
+        CachedToken(String owner, int ttlMinutes) {
+            this.owner = owner;
+            this.expiry = Instant.now().plus(Duration.ofMinutes(ttlMinutes));
+        }
+
+        boolean isExpired() {
+            return Instant.now().isAfter(expiry);
+        }
     }
 }
