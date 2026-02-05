@@ -38,6 +38,16 @@ app:
     secret: ${JWT_SECRET:tmux-remote-super-secret-key-for-jwt-token-256bits}
     expiration-ms: 86400000  # 24 hours
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+      base-path: /
+  endpoint:
+    health:
+      show-details: never
+
 sentry:
   dsn: ${SENTRY_DSN:}
   environment: ${SENTRY_ENV:production}
