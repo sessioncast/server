@@ -147,7 +147,7 @@ public class AgentTokenService {
 
     private String validateTokenWithPlatformApi(String token) {
         try {
-            String url = platformApiUrl + "/api/agent-tokens/validate/" + token;
+            String url = platformApiUrl + "/public/agent-tokens/validate/" + token;
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
