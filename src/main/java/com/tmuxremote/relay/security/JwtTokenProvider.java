@@ -52,6 +52,12 @@ public class JwtTokenProvider {
                 .parseSignedClaims(token)
                 .getPayload();
 
+        // Platform API puts email in "email" claim and user ID in "sub"
+        String email = claims.get("email", String.class);
+        if (email != null && !email.isBlank()) {
+            return email;
+        }
+        // Fallback to subject for relay-generated tokens (where sub = email)
         return claims.getSubject();
     }
 
