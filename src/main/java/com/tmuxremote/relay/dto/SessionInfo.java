@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -21,6 +23,9 @@ public class SessionInfo {
     private String ownerEmail;  // Owner of this session (from agent token)
     private WebSocketSession hostSession;
     private Set<WebSocketSession> viewers;
+    private String lastScreen;
+    private String lastScreenType;
+    private List<Map<String, Object>> panes;  // Pane layout info
 
     public static SessionInfo create(String id, String label, String machineId, String ownerEmail, WebSocketSession hostSession) {
         return SessionInfo.builder()

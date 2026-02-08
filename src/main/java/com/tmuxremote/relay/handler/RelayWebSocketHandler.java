@@ -2,6 +2,7 @@ package com.tmuxremote.relay.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tmuxremote.relay.dto.Message;
+import com.tmuxremote.relay.dto.SessionInfo;
 import com.tmuxremote.relay.security.JwtTokenProvider;
 import com.tmuxremote.relay.service.AgentTokenService;
 import com.tmuxremote.relay.service.SessionManager;
@@ -52,6 +53,7 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
                 case "listSessions" -> handleListSessions(session);
                 case "createSession" -> handleCreateSession(session, message);
                 case "sessionCreated" -> handleSessionCreated(message);
+                case "paneLayout" -> handlePaneLayout(message);
                 case "killSession" -> handleKillSession(session, message);
                 default -> log.warn("Unknown message type: {}", message.getType());
             }
@@ -98,11 +100,35 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleScreen(Message message) {
-        sessionManager.handleScreen(message.getSession(), message.getPayload(), message.getType());
+        sessionManager.handleScreen(message.getSession(), message.getPayload(), message.getType(), message.getMeta());
     }
 
     private void handleKeys(WebSocketSession session, Message message) {
-        sessionManager.handleKeys(message.getSession(), message.getPayload(), session);
+        sessionManager.handleKeys(message.getSession(), message.getPayload(), session, message.getMeta());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handlePaneLayout(Message message) {
+        String sessionId = message.getSession();
+        String payload = message.getPayload();
+        if (sessionId == null || payload == null) return;
+
+        try {
+            java.util.List<java.util.Map<String, Object>> panes = objectMapper.readValue(payload, java.util.List.class);
+            sessionManager.updatePaneLayout(sessionId, panes);
+
+            // Broadcast paneLayout to viewers
+            SessionInfo sessionInfo = sessionManager.getSession(sessionId);
+            if (sessionInfo != null) {
+                sessionManager.broadcastToViewersPublic(sessionInfo, message);
+                // Also broadcast updated session list since panes changed
+                if (sessionInfo.getOwnerEmail() != null) {
+                    sessionManager.broadcastSessionListToOwnerPublic(sessionInfo.getOwnerEmail());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse paneLayout", e);
+        }
     }
 
     private void handleResize(WebSocketSession session, Message message) {
