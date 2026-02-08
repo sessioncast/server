@@ -55,6 +55,8 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
                 case "sessionCreated" -> handleSessionCreated(message);
                 case "paneLayout" -> handlePaneLayout(message);
                 case "killSession" -> handleKillSession(session, message);
+                case "requestFileView" -> handleRequestFileView(session, message);
+                case "file_view" -> handleFileView(message);
                 default -> log.warn("Unknown message type: {}", message.getType());
             }
         } catch (Exception e) {
@@ -185,6 +187,47 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
 
         log.info("Kill session request: session={}, owner={}", sessionId, ownerEmail);
         sessionManager.forwardKillSession(sessionId, ownerEmail);
+    }
+
+    /**
+     * Forward requestFileView from viewer to host (agent)
+     */
+    private void handleRequestFileView(WebSocketSession viewerSession, Message message) {
+        String sessionId = message.getSession();
+        if (sessionId == null) return;
+
+        SessionInfo sessionInfo = sessionManager.getSession(sessionId);
+        if (sessionInfo != null && sessionInfo.getHostSession() != null && sessionInfo.getHostSession().isOpen()) {
+            // Normalize: ensure filePath is set in meta (web sends "path", agent expects "filePath")
+            if (message.getMeta() != null && message.getMeta().get("filePath") == null && message.getMeta().get("path") != null) {
+                message.getMeta().put("filePath", message.getMeta().get("path"));
+            }
+            try {
+                String json = objectMapper.writeValueAsString(message);
+                synchronized (sessionInfo.getHostSession()) {
+                    sessionInfo.getHostSession().sendMessage(new TextMessage(json));
+                }
+                log.info("Forwarded requestFileView to host: session={}", sessionId);
+            } catch (Exception e) {
+                log.error("Failed to forward requestFileView", e);
+            }
+        } else {
+            log.warn("requestFileView: host not connected for session: {}", sessionId);
+        }
+    }
+
+    /**
+     * Forward file_view from host (agent) to viewers
+     */
+    private void handleFileView(Message message) {
+        String sessionId = message.getSession();
+        if (sessionId == null) return;
+
+        SessionInfo sessionInfo = sessionManager.getSession(sessionId);
+        if (sessionInfo != null) {
+            sessionManager.broadcastToViewersPublic(sessionInfo, message);
+            log.debug("Forwarded file_view to viewers: session={}", sessionId);
+        }
     }
 
     private String extractOwnerFromSession(WebSocketSession session) {

@@ -51,6 +51,12 @@ management:
     health:
       show-details: never
 
+gemini:
+  api:
+    key: ${GEMINI_API_KEY:}
+    url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent}
+    timeout-seconds: ${GEMINI_TIMEOUT:30}
+
 sentry:
   dsn: ${SENTRY_DSN:}
   environment: ${SENTRY_ENV:production}

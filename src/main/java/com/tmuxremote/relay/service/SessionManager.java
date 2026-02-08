@@ -66,6 +66,32 @@ public class SessionManager {
             }
             sessionInfo.getViewers().add(wsSession);
             log.info("Viewer registered: session={}, viewerId={}, owner={}", sessionId, wsSession.getId(), ownerEmail);
+
+            // Send cached pane layout to newly joined viewer
+            if (sessionInfo.getPanes() != null && !sessionInfo.getPanes().isEmpty()) {
+                try {
+                    String panesJson = objectMapper.writeValueAsString(sessionInfo.getPanes());
+                    Message paneLayoutMsg = Message.builder()
+                            .type("paneLayout")
+                            .session(sessionId)
+                            .payload(panesJson)
+                            .build();
+                    sendMessage(wsSession, paneLayoutMsg);
+                    log.debug("Sent cached paneLayout to viewer: session={}, panes={}", sessionId, sessionInfo.getPanes().size());
+                } catch (Exception e) {
+                    log.error("Failed to send cached paneLayout", e);
+                }
+            }
+
+            // Send cached last screen to newly joined viewer
+            if (sessionInfo.getLastScreen() != null) {
+                Message screenMsg = Message.builder()
+                        .type(sessionInfo.getLastScreenType() != null ? sessionInfo.getLastScreenType() : "screen")
+                        .session(sessionId)
+                        .payload(sessionInfo.getLastScreen())
+                        .build();
+                sendMessage(wsSession, screenMsg);
+            }
         } else {
             SessionInfo newSession = SessionInfo.builder()
                     .id(sessionId)
@@ -227,6 +253,32 @@ public class SessionManager {
     }
 
     public record Stats(int totalSessions, int onlineSessions, int totalViewers) {}
+
+    /**
+     * Send a message to an agent by agentId (machineId).
+     * Finds any active host session for this agent and sends the message.
+     */
+    public boolean sendToAgent(String agentId, Message message) {
+        return sessions.values().stream()
+                .filter(info -> agentId.equals(info.getMachineId()))
+                .filter(info -> info.getHostSession() != null && info.getHostSession().isOpen())
+                .findFirst()
+                .map(info -> {
+                    sendMessage(info.getHostSession(), message);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * Check if an agent is currently connected via WebSocket.
+     */
+    public boolean isAgentConnected(String agentId) {
+        return sessions.values().stream()
+                .anyMatch(info -> agentId.equals(info.getMachineId())
+                        && info.getHostSession() != null
+                        && info.getHostSession().isOpen());
+    }
 
     public void updatePaneLayout(String sessionId, List<Map<String, Object>> panes) {
         SessionInfo sessionInfo = sessions.get(sessionId);

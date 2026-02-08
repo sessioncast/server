@@ -52,6 +52,12 @@ public class JwtTokenProvider {
                 .parseSignedClaims(token)
                 .getPayload();
 
+        // Auth Server tokens have email in "email" claim, subject is UUID
+        String email = claims.get("email", String.class);
+        if (email != null) {
+            return email;
+        }
+        // Fallback: old tokens may have email as subject
         return claims.getSubject();
     }
 
