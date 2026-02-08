@@ -79,37 +79,47 @@ public class SessionManager {
         }
     }
 
-    public void handleScreen(String sessionId, String payload, String type) {
+    public void handleScreen(String sessionId, String payload, String type, Map<String, String> meta) {
         SessionInfo sessionInfo = sessions.get(sessionId);
         if (sessionInfo == null) {
             log.warn("Screen data for unknown session: {}", sessionId);
             return;
         }
 
-        // Forward with original type (screen or screenGz)
-        Message screenMessage = Message.builder()
+        // Cache last screen (for the default/single pane view)
+        if (meta == null || meta.get("pane") == null) {
+            sessionInfo.setLastScreen(payload);
+            sessionInfo.setLastScreenType(type);
+        }
+
+        // Forward with original type and meta
+        Message.MessageBuilder builder = Message.builder()
                 .type(type)
                 .session(sessionId)
-                .payload(payload)
-                .build();
+                .payload(payload);
+        if (meta != null && !meta.isEmpty()) {
+            builder.meta(meta);
+        }
 
-        broadcastToViewers(sessionInfo, screenMessage);
+        broadcastToViewers(sessionInfo, builder.build());
     }
 
-    public void handleKeys(String sessionId, String payload, WebSocketSession viewerSession) {
+    public void handleKeys(String sessionId, String payload, WebSocketSession viewerSession, Map<String, String> meta) {
         SessionInfo sessionInfo = sessions.get(sessionId);
         if (sessionInfo == null || sessionInfo.getHostSession() == null) {
             log.warn("Keys for unavailable session: {}", sessionId);
             return;
         }
 
-        Message keysMessage = Message.builder()
+        Message.MessageBuilder builder = Message.builder()
                 .type("keys")
                 .session(sessionId)
-                .payload(payload)
-                .build();
+                .payload(payload);
+        if (meta != null && !meta.isEmpty()) {
+            builder.meta(meta);
+        }
 
-        sendMessage(sessionInfo.getHostSession(), keysMessage);
+        sendMessage(sessionInfo.getHostSession(), builder.build());
     }
 
     public void handleResize(String sessionId, int cols, int rows) {
@@ -217,6 +227,28 @@ public class SessionManager {
     }
 
     public record Stats(int totalSessions, int onlineSessions, int totalViewers) {}
+
+    public void updatePaneLayout(String sessionId, List<Map<String, Object>> panes) {
+        SessionInfo sessionInfo = sessions.get(sessionId);
+        if (sessionInfo == null) {
+            log.warn("paneLayout for unknown session: {}", sessionId);
+            return;
+        }
+        sessionInfo.setPanes(panes);
+        log.debug("Updated pane layout for session {}: {} panes", sessionId, panes.size());
+    }
+
+    public SessionInfo getSession(String sessionId) {
+        return sessions.get(sessionId);
+    }
+
+    public void broadcastToViewersPublic(SessionInfo sessionInfo, Message message) {
+        broadcastToViewers(sessionInfo, message);
+    }
+
+    public void broadcastSessionListToOwnerPublic(String ownerEmail) {
+        broadcastSessionListToOwner(ownerEmail);
+    }
 
     private void broadcastToViewers(SessionInfo sessionInfo, Message message) {
         sessionInfo.getViewers().forEach(viewer -> sendMessage(viewer, message));
