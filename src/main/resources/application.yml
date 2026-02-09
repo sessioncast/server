@@ -27,6 +27,10 @@ spring:
               - email
               - profile
 
+platform:
+  api:
+    url: ${PLATFORM_API_URL:}
+
 app:
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
@@ -36,7 +40,7 @@ app:
     allowed-domains: ${ALLOWED_DOMAINS:}  # Comma-separated list, e.g., "company.com,gmail.com"
   jwt:
     secret: ${JWT_SECRET:tmux-remote-super-secret-key-for-jwt-token-256bits}
-    expiration-ms: 86400000  # 24 hours
+    expiration-ms: ${JWT_EXPIRATION_MS:604800000}  # 7 days
 
 logging:
   level:
