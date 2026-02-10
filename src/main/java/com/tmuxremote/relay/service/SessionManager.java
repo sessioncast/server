@@ -418,6 +418,12 @@ public class SessionManager {
                 .build();
         sendMessage(sessionInfo.getHostSession(), killMsg);
         log.info("Forwarded killSession to host: session={}", sessionId);
+
+        // Immediately remove session from list since user explicitly killed it
+        sessions.remove(sessionId);
+        offlineTimestamps.remove(sessionId);
+        broadcastSessionListToOwner(ownerEmail);
+        log.info("Removed killed session: {}", sessionId);
     }
 
     // ========== Project Management Methods ==========
