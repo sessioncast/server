@@ -48,6 +48,8 @@ public class SessionManager {
     private final Map<String, Set<WebSocketSession>> sharedViewers = new ConcurrentHashMap<>();
     // Track last screen data per session for sending snapshot to new shared viewers
     private final Map<String, Message> lastScreenMessages = new ConcurrentHashMap<>();
+    // Track terminal size per session: sessionId -> [cols, rows]
+    private final Map<String, int[]> terminalSizes = new ConcurrentHashMap<>();
 
     public void registerHost(String sessionId, String label, String machineId, String ownerEmail, WebSocketSession wsSession) {
         SessionInfo existing = sessions.get(sessionId);
@@ -114,6 +116,17 @@ public class SessionManager {
             String relaySessionId = sessionInfo.getId();
             sharedViewers.computeIfAbsent(relaySessionId, k -> ConcurrentHashMap.newKeySet()).add(wsSession);
             log.info("Shared viewer registered: session={}, viewerId={}", relaySessionId, wsSession.getId());
+
+            // Send terminal size first so viewer can set up correct dimensions
+            int[] size = terminalSizes.get(relaySessionId);
+            if (size != null) {
+                Message sizeMessage = Message.builder()
+                        .type("terminalSize")
+                        .session(relaySessionId)
+                        .meta(Map.of("cols", String.valueOf(size[0]), "rows", String.valueOf(size[1])))
+                        .build();
+                sendMessage(wsSession, sizeMessage);
+            }
 
             // Send current screen snapshot if available
             Message lastScreen = lastScreenMessages.get(relaySessionId);
@@ -199,6 +212,9 @@ public class SessionManager {
             return;
         }
 
+        // Track terminal size for shared viewers
+        terminalSizes.put(sessionId, new int[]{cols, rows});
+
         Message resizeMessage = Message.builder()
                 .type("resize")
                 .session(sessionId)
@@ -207,6 +223,14 @@ public class SessionManager {
 
         sendMessage(sessionInfo.getHostSession(), resizeMessage);
         log.debug("Forwarded resize to host: session={}, cols={}, rows={}", sessionId, cols, rows);
+
+        // Notify shared viewers of terminal size change
+        Message sizeMessage = Message.builder()
+                .type("terminalSize")
+                .session(sessionId)
+                .meta(Map.of("cols", String.valueOf(cols), "rows", String.valueOf(rows)))
+                .build();
+        broadcastToSharedViewers(sessionId, sizeMessage);
     }
 
     public void sendSessionList(WebSocketSession wsSession, String ownerEmail) {
