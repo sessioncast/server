@@ -138,24 +138,28 @@ public class SessionManager {
         }
     }
 
-    public void handleScreen(String sessionId, String payload, String type) {
+    public void handleScreen(String sessionId, String payload, String type, Map<String, String> meta) {
         SessionInfo sessionInfo = sessions.get(sessionId);
         if (sessionInfo == null) {
             log.warn("Screen data for unknown session: {}", sessionId);
             return;
         }
 
-        // Forward with original type (screen or screenGz)
+        // Forward with original type (screen or screenGz), preserving meta (e.g., pane ID)
         Message screenMessage = Message.builder()
                 .type(type)
                 .session(sessionId)
                 .payload(payload)
+                .meta(meta)
                 .build();
 
         broadcastToViewers(sessionInfo, screenMessage);
 
         // Cache last screen for new shared viewers & broadcast to shared viewers
-        lastScreenMessages.put(sessionId, screenMessage);
+        // Only cache non-pane screens as the main snapshot
+        if (meta == null || meta.get("pane") == null) {
+            lastScreenMessages.put(sessionId, screenMessage);
+        }
         broadcastToSharedViewers(sessionId, screenMessage);
     }
 
@@ -189,7 +193,7 @@ public class SessionManager {
         log.info("Forwarded requestFileView to host: session={}, filePath={}", sessionId, filePath);
     }
 
-    public void handleKeys(String sessionId, String payload, WebSocketSession viewerSession) {
+    public void handleKeys(String sessionId, String payload, WebSocketSession viewerSession, Map<String, String> meta) {
         SessionInfo sessionInfo = sessions.get(sessionId);
         if (sessionInfo == null || sessionInfo.getHostSession() == null) {
             log.warn("Keys for unavailable session: {}", sessionId);
@@ -200,6 +204,7 @@ public class SessionManager {
                 .type("keys")
                 .session(sessionId)
                 .payload(payload)
+                .meta(meta)
                 .build();
 
         sendMessage(sessionInfo.getHostSession(), keysMessage);
@@ -345,6 +350,17 @@ public class SessionManager {
     }
 
     public record Stats(int totalSessions, int onlineSessions, int totalViewers) {}
+
+    /**
+     * Forward a message to all viewers (regular + shared) of a session.
+     * Used for paneLayout and similar messages that need to reach all viewers.
+     */
+    public void forwardToViewers(String sessionId, Message message) {
+        SessionInfo sessionInfo = sessions.get(sessionId);
+        if (sessionInfo == null) return;
+        broadcastToViewers(sessionInfo, message);
+        broadcastToSharedViewers(sessionId, message);
+    }
 
     private void broadcastToViewers(SessionInfo sessionInfo, Message message) {
         sessionInfo.getViewers().forEach(viewer -> sendMessage(viewer, message));

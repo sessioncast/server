@@ -114,6 +114,7 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
                 case "addSourceResult" -> handleAddSourceResult(session, message);
                 case "updateSources" -> handleUpdateSources(session, message);
                 case "deleteProject" -> handleDeleteProject(session, message);
+                case "paneLayout" -> handlePaneLayout(message);
                 case "ping" -> {} // Heartbeat - no action needed
                 case "file_view" -> handleFileView(message);  // Forward file content to viewers
                 case "requestFileView" -> handleRequestFileView(session, message);  // Forward file request to host
@@ -168,7 +169,14 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleScreen(Message message) {
-        sessionManager.handleScreen(message.getSession(), message.getPayload(), message.getType());
+        sessionManager.handleScreen(message.getSession(), message.getPayload(), message.getType(), message.getMeta());
+    }
+
+    private void handlePaneLayout(Message message) {
+        String sessionId = message.getSession();
+        if (sessionId != null) {
+            sessionManager.forwardToViewers(sessionId, message);
+        }
     }
 
     private void handleFileView(Message message) {
@@ -196,7 +204,7 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleKeys(WebSocketSession session, Message message) {
-        sessionManager.handleKeys(message.getSession(), message.getPayload(), session);
+        sessionManager.handleKeys(message.getSession(), message.getPayload(), session, message.getMeta());
     }
 
     private void handleResize(WebSocketSession session, Message message) {
