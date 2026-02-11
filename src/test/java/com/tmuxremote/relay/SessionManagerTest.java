@@ -36,7 +36,7 @@ class SessionManagerTest {
         when(mockSession.isOpen()).thenReturn(true);
 
         // When
-        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, mockSession);
+        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, null, mockSession);
 
         // Then - verify by requesting session list
         WebSocketSession viewerSession = mock(WebSocketSession.class);
@@ -70,11 +70,11 @@ class SessionManagerTest {
         when(viewerSession.isOpen()).thenReturn(true);
 
         // When
-        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, hostSession);
+        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, null, hostSession);
         sessionManager.registerViewer("test/dev", TEST_OWNER, viewerSession);
 
         // Then - no exception means success
-        assertDoesNotThrow(() -> sessionManager.handleScreen("test/dev", "dGVzdA==", "screen"));
+        assertDoesNotThrow(() -> sessionManager.handleScreen("test/dev", "dGVzdA==", "screen", null));
     }
 
     @Test
@@ -96,11 +96,11 @@ class SessionManagerTest {
             return null;
         }).when(viewerSession).sendMessage(any(TextMessage.class));
 
-        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, hostSession);
+        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, null, hostSession);
         sessionManager.registerViewer("test/dev", TEST_OWNER, viewerSession);
 
         // When
-        sessionManager.handleScreen("test/dev", "SGVsbG8gV29ybGQ=", "screen"); // "Hello World" in base64
+        sessionManager.handleScreen("test/dev", "SGVsbG8gV29ybGQ=", "screen", null); // "Hello World" in base64
 
         // Then
         assertNotNull(capturedMessage.get());
@@ -126,10 +126,10 @@ class SessionManagerTest {
         WebSocketSession viewerSession = mock(WebSocketSession.class);
         when(viewerSession.getId()).thenReturn("viewer-1");
 
-        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, hostSession);
+        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, null, hostSession);
 
         // When
-        sessionManager.handleKeys("test/dev", "ls -la\n", viewerSession);
+        sessionManager.handleKeys("test/dev", "ls -la\n", viewerSession, null);
 
         // Then
         assertNotNull(capturedMessage.get());
@@ -145,7 +145,7 @@ class SessionManagerTest {
         when(hostSession.getId()).thenReturn("host-1");
         when(hostSession.isOpen()).thenReturn(true);
 
-        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, hostSession);
+        sessionManager.registerHost("test/dev", "Test Dev", "test-machine", TEST_OWNER, null, hostSession);
 
         // When
         sessionManager.handleDisconnect(hostSession);
@@ -171,7 +171,7 @@ class SessionManagerTest {
     @Test
     @DisplayName("존재하지 않는 세션에 screen 전송 시 예외가 발생하지 않아야 함")
     void testScreenToNonExistentSession() {
-        assertDoesNotThrow(() -> sessionManager.handleScreen("non-existent", "data", "screen"));
+        assertDoesNotThrow(() -> sessionManager.handleScreen("non-existent", "data", "screen", null));
     }
 
     @Test
@@ -182,7 +182,7 @@ class SessionManagerTest {
         when(hostSession.getId()).thenReturn("host-1");
         when(hostSession.isOpen()).thenReturn(true);
 
-        sessionManager.registerHost("machine1/session1", "Session 1", "machine1", TEST_OWNER, hostSession);
+        sessionManager.registerHost("machine1/session1", "Session 1", "machine1", TEST_OWNER, null, hostSession);
 
         WebSocketSession viewerSession = mock(WebSocketSession.class);
         when(viewerSession.getId()).thenReturn("viewer-1");
@@ -224,8 +224,8 @@ class SessionManagerTest {
         when(host2.getId()).thenReturn("host-2");
         when(host2.isOpen()).thenReturn(true);
 
-        sessionManager.registerHost("machine1/session1", "Session 1", "machine1", owner1, host1);
-        sessionManager.registerHost("machine2/session2", "Session 2", "machine2", owner2, host2);
+        sessionManager.registerHost("machine1/session1", "Session 1", "machine1", owner1, null, host1);
+        sessionManager.registerHost("machine2/session2", "Session 2", "machine2", owner2, null, host2);
 
         // When - owner1 requests session list
         WebSocketSession viewerSession = mock(WebSocketSession.class);

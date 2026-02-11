@@ -188,6 +188,28 @@ public class AgentTokenService {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Notify Platform API that an agent has connected (update lastConnectedAt).
+     * Runs async to not block the WebSocket registration.
+     */
+    public void notifyAgentConnected(String token, String machineId) {
+        if (platformApiUrl == null || platformApiUrl.isBlank()) return;
+
+        new Thread(() -> {
+            try {
+                String url = platformApiUrl + "/internal/agents/heartbeat";
+                var headers = new org.springframework.http.HttpHeaders();
+                headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                var body = Map.of("tokens", Set.of(token));
+                var request = new org.springframework.http.HttpEntity<>(body, headers);
+                restTemplate.postForEntity(url, request, String.class);
+                log.debug("Notified platform of agent connection: {}...", token.substring(0, Math.min(12, token.length())));
+            } catch (Exception e) {
+                log.warn("Failed to notify platform of agent connection: {}", e.getMessage());
+            }
+        }, "agent-connect-notify").start();
+    }
+
     // Clear expired cache entries periodically
     public void cleanupCache() {
         platformTokenCache.entrySet().removeIf(entry -> entry.getValue().isExpired());

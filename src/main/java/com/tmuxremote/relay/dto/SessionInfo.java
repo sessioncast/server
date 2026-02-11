@@ -19,6 +19,7 @@ public class SessionInfo {
     private String machineId;
     private String status;
     private String ownerEmail;  // Owner of this session (from agent token)
+    private String agentToken;  // Agent token for heartbeat to Platform API
     private WebSocketSession hostSession;
     private Set<WebSocketSession> viewers;
 

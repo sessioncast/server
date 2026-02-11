@@ -52,13 +52,24 @@ public class SessionManager {
     // Track terminal size per session: sessionId -> [cols, rows]
     private final Map<String, int[]> terminalSizes = new ConcurrentHashMap<>();
 
-    public void registerHost(String sessionId, String label, String machineId, String ownerEmail, WebSocketSession wsSession) {
+    /**
+     * Get all unique agent tokens for currently online sessions (for heartbeat to Platform API).
+     */
+    public Set<String> getConnectedAgentTokens() {
+        return sessions.values().stream()
+                .filter(s -> "online".equals(s.getStatus()) && s.getAgentToken() != null && !s.getAgentToken().isBlank())
+                .map(SessionInfo::getAgentToken)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    public void registerHost(String sessionId, String label, String machineId, String ownerEmail, String agentToken, WebSocketSession wsSession) {
         SessionInfo existing = sessions.get(sessionId);
         if (existing != null && existing.getHostSession() != null) {
             log.warn("Host already registered for session: {}, replacing", sessionId);
         }
 
         SessionInfo sessionInfo = SessionInfo.create(sessionId, label, machineId, ownerEmail, wsSession);
+        sessionInfo.setAgentToken(agentToken);
         if (existing != null) {
             sessionInfo.setViewers(existing.getViewers());
         }

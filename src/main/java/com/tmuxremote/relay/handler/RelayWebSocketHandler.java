@@ -155,8 +155,13 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
             if (ownerEmail != null) {
                 sessionOwnerMap.put(session.getId(), ownerEmail);
             }
-            sessionManager.registerHost(sessionId, label, machineId, ownerEmail, session);
+            sessionManager.registerHost(sessionId, label, machineId, ownerEmail, agentToken, session);
             log.info("Host registered: session={}, machine={}, owner={}", sessionId, machineId, ownerEmail);
+
+            // Notify Platform API of agent connection (update lastConnectedAt)
+            if (agentToken != null && !agentToken.contains("@")) {
+                agentTokenService.notifyAgentConnected(agentToken, machineId);
+            }
 
         } else if ("viewer".equals(role)) {
             // Get owner from JWT token (passed as query param)
