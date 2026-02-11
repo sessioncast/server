@@ -41,6 +41,9 @@ app:
   jwt:
     secret: ${JWT_SECRET:tmux-remote-super-secret-key-for-jwt-token-256bits}
     expiration-ms: ${JWT_EXPIRATION_MS:604800000}  # 7 days
+  # Platform API for agent token validation
+  platform-api-url: ${PLATFORM_API_URL:https://api.sessioncast.io}
+  platform-token-cache-ttl-minutes: ${PLATFORM_TOKEN_CACHE_TTL:30}
 
 logging:
   level:
