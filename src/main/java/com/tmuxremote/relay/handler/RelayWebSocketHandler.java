@@ -115,6 +115,7 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
                 case "updateSources" -> handleUpdateSources(session, message);
                 case "deleteProject" -> handleDeleteProject(session, message);
                 case "paneLayout" -> handlePaneLayout(message);
+                case "clearOfflineSessions" -> handleClearOfflineSessions(session);
                 case "ping" -> {} // Heartbeat - no action needed
                 case "file_view" -> handleFileView(message);  // Forward file content to viewers
                 case "requestFileView" -> handleRequestFileView(session, message);  // Forward file request to host
@@ -176,6 +177,14 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
         String sessionId = message.getSession();
         if (sessionId != null) {
             sessionManager.forwardToViewers(sessionId, message);
+        }
+    }
+
+    private void handleClearOfflineSessions(WebSocketSession session) {
+        String ownerEmail = sessionOwnerMap.get(session.getId());
+        if (ownerEmail != null) {
+            int removed = sessionManager.clearOfflineSessionsForOwner(ownerEmail);
+            log.info("Cleared {} offline sessions for owner={}", removed, ownerEmail);
         }
     }
 

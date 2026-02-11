@@ -14,6 +14,7 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -334,6 +335,35 @@ public class SessionManager {
             }
             return false;
         });
+
+        return cleaned.get();
+    }
+
+    /**
+     * Remove all offline sessions for a specific owner
+     */
+    public int clearOfflineSessionsForOwner(String ownerEmail) {
+        AtomicInteger cleaned = new AtomicInteger(0);
+        List<String> toRemove = new ArrayList<>();
+
+        sessions.forEach((sessionId, info) -> {
+            if ("offline".equals(info.getStatus()) &&
+                    ownerEmail.equals(info.getOwnerEmail())) {
+                toRemove.add(sessionId);
+            }
+        });
+
+        for (String sessionId : toRemove) {
+            sessions.remove(sessionId);
+            offlineTimestamps.remove(sessionId);
+            lastScreenMessages.remove(sessionId);
+            cleaned.incrementAndGet();
+            log.info("Cleared offline session: {} for owner={}", sessionId, ownerEmail);
+        }
+
+        if (cleaned.get() > 0) {
+            broadcastSessionListToOwner(ownerEmail);
+        }
 
         return cleaned.get();
     }
