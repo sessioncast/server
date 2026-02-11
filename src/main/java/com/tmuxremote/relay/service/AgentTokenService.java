@@ -147,13 +147,13 @@ public class AgentTokenService {
 
     private String validateTokenWithPlatformApi(String token) {
         try {
-            String url = platformApiUrl + "/internal/validate-agent/" + token;
+            String url = platformApiUrl + "/public/agent-tokens/validate/" + token;
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
-                if (json.has("userEmail")) {
-                    return json.get("userEmail").asText();
+                if (json.has("valid") && json.get("valid").asBoolean() && json.has("owner")) {
+                    return json.get("owner").asText();
                 }
             }
         } catch (Exception e) {
