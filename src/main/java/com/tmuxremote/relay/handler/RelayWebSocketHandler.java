@@ -227,8 +227,9 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
         try {
             int cols = Integer.parseInt(colsStr);
             int rows = Integer.parseInt(rowsStr);
-            log.debug("Resize request: session={}, cols={}, rows={}", message.getSession(), cols, rows);
-            sessionManager.handleResize(message.getSession(), cols, rows);
+            String pane = meta.get("pane");
+            log.debug("Resize request: session={}, cols={}, rows={}, pane={}", message.getSession(), cols, rows, pane);
+            sessionManager.handleResize(message.getSession(), cols, rows, pane);
         } catch (NumberFormatException e) {
             log.warn("Invalid resize dimensions: cols={}, rows={}", colsStr, rowsStr);
         }

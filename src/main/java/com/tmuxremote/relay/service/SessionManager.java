@@ -211,32 +211,44 @@ public class SessionManager {
         sendMessage(sessionInfo.getHostSession(), keysMessage);
     }
 
-    public void handleResize(String sessionId, int cols, int rows) {
+    public void handleResize(String sessionId, int cols, int rows, String pane) {
         SessionInfo sessionInfo = sessions.get(sessionId);
         if (sessionInfo == null || sessionInfo.getHostSession() == null) {
             log.warn("Resize for unavailable session: {}", sessionId);
             return;
         }
 
-        // Track terminal size for shared viewers
-        terminalSizes.put(sessionId, new int[]{cols, rows});
+        // Track terminal size for shared viewers (only for whole-session resize)
+        if (pane == null) {
+            terminalSizes.put(sessionId, new int[]{cols, rows});
+        }
+
+        // Build meta with optional pane info
+        Map<String, String> meta = new java.util.HashMap<>();
+        meta.put("cols", String.valueOf(cols));
+        meta.put("rows", String.valueOf(rows));
+        if (pane != null) {
+            meta.put("pane", pane);
+        }
 
         Message resizeMessage = Message.builder()
                 .type("resize")
                 .session(sessionId)
-                .meta(Map.of("cols", String.valueOf(cols), "rows", String.valueOf(rows)))
+                .meta(meta)
                 .build();
 
         sendMessage(sessionInfo.getHostSession(), resizeMessage);
-        log.debug("Forwarded resize to host: session={}, cols={}, rows={}", sessionId, cols, rows);
+        log.debug("Forwarded resize to host: session={}, cols={}, rows={}, pane={}", sessionId, cols, rows, pane);
 
-        // Notify shared viewers of terminal size change
-        Message sizeMessage = Message.builder()
-                .type("terminalSize")
-                .session(sessionId)
-                .meta(Map.of("cols", String.valueOf(cols), "rows", String.valueOf(rows)))
-                .build();
-        broadcastToSharedViewers(sessionId, sizeMessage);
+        // Notify shared viewers of terminal size change (only for whole-session resize)
+        if (pane == null) {
+            Message sizeMessage = Message.builder()
+                    .type("terminalSize")
+                    .session(sessionId)
+                    .meta(Map.of("cols", String.valueOf(cols), "rows", String.valueOf(rows)))
+                    .build();
+            broadcastToSharedViewers(sessionId, sizeMessage);
+        }
     }
 
     public void sendSessionList(WebSocketSession wsSession, String ownerEmail) {
