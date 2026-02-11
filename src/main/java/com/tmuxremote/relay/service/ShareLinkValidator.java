@@ -45,7 +45,7 @@ public class ShareLinkValidator {
                 JsonNode json = objectMapper.readTree(response.getBody());
                 if (json.has("valid") && json.get("valid").asBoolean()) {
                     ShareLinkInfo info = new ShareLinkInfo(
-                            json.get("sessionId").asText(),
+                            json.get("relaySessionId").asText(),
                             json.get("ownerEmail").asText(),
                             json.get("mode").asText()
                     );
