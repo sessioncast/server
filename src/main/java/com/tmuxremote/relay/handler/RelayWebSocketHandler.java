@@ -176,7 +176,7 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
     private void handlePaneLayout(Message message) {
         String sessionId = message.getSession();
         if (sessionId != null) {
-            sessionManager.forwardToViewers(sessionId, message);
+            sessionManager.broadcastToOwnerViewers(sessionId, message);
         }
     }
 

@@ -392,6 +392,25 @@ public class SessionManager {
         broadcastToSharedViewers(sessionId, message);
     }
 
+    /**
+     * Forward a message to ALL viewer connections of a session's owner.
+     * Used for paneLayout so the session list shows pane info without clicking.
+     */
+    public void broadcastToOwnerViewers(String sessionId, Message message) {
+        SessionInfo sessionInfo = sessions.get(sessionId);
+        if (sessionInfo == null) return;
+        String ownerEmail = sessionInfo.getOwnerEmail();
+        if (ownerEmail == null) return;
+
+        viewerSessionMap.forEach((viewerId, viewer) -> {
+            String viewerOwner = viewerOwnerMap.get(viewerId);
+            if (ownerEmail.equals(viewerOwner)) {
+                sendMessage(viewer, message);
+            }
+        });
+        broadcastToSharedViewers(sessionId, message);
+    }
+
     private void broadcastToViewers(SessionInfo sessionInfo, Message message) {
         sessionInfo.getViewers().forEach(viewer -> sendMessage(viewer, message));
     }
