@@ -147,17 +147,17 @@ public class AgentTokenService {
 
     private String validateTokenWithPlatformApi(String token) {
         try {
-            String url = platformApiUrl + "/api/agent-tokens/validate/" + token;
+            String url = platformApiUrl + "/internal/validate-agent/" + token;
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode json = objectMapper.readTree(response.getBody());
-                if (json.has("valid") && json.get("valid").asBoolean()) {
-                    return json.get("owner").asText();
+                if (json.has("userEmail")) {
+                    return json.get("userEmail").asText();
                 }
             }
         } catch (Exception e) {
-            log.debug("Platform API call failed: {}", e.getMessage());
+            log.warn("Platform API call failed: {}", e.getMessage());
         }
         return null;
     }
