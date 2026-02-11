@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -42,6 +43,11 @@ public class SessionManager {
 
     // Project session prefix
     private static final String PROJECT_SESSION_PREFIX = "proj_";
+
+    // Shared viewers: sessionId -> Set<WebSocketSession> (read-only viewers from share links)
+    private final Map<String, Set<WebSocketSession>> sharedViewers = new ConcurrentHashMap<>();
+    // Track last screen data per session for sending snapshot to new shared viewers
+    private final Map<String, Message> lastScreenMessages = new ConcurrentHashMap<>();
 
     public void registerHost(String sessionId, String label, String machineId, String ownerEmail, WebSocketSession wsSession) {
         SessionInfo existing = sessions.get(sessionId);
@@ -89,6 +95,36 @@ public class SessionManager {
         }
     }
 
+    public void registerSharedViewer(String sessionId, String ownerEmail, WebSocketSession wsSession) {
+        // Find matching session by looking for sessions owned by this email
+        // sessionId from Platform API is a UUID, but relay uses "machineId/sessionName"
+        // So we need to find the relay session that matches the owner
+        SessionInfo sessionInfo = sessions.get(sessionId);
+        if (sessionInfo == null) {
+            // Try to find session by owner email (Platform sessionId may not match relay sessionId)
+            // For shared viewers, we find any active session for this owner
+            sessionInfo = sessions.values().stream()
+                    .filter(info -> ownerEmail != null && ownerEmail.equals(info.getOwnerEmail()))
+                    .filter(info -> "online".equals(info.getStatus()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (sessionInfo != null) {
+            String relaySessionId = sessionInfo.getId();
+            sharedViewers.computeIfAbsent(relaySessionId, k -> ConcurrentHashMap.newKeySet()).add(wsSession);
+            log.info("Shared viewer registered: session={}, viewerId={}", relaySessionId, wsSession.getId());
+
+            // Send current screen snapshot if available
+            Message lastScreen = lastScreenMessages.get(relaySessionId);
+            if (lastScreen != null) {
+                sendMessage(wsSession, lastScreen);
+            }
+        } else {
+            log.warn("No active session found for shared viewer: sessionId={}, owner={}", sessionId, ownerEmail);
+        }
+    }
+
     public void handleScreen(String sessionId, String payload, String type) {
         SessionInfo sessionInfo = sessions.get(sessionId);
         if (sessionInfo == null) {
@@ -104,6 +140,10 @@ public class SessionManager {
                 .build();
 
         broadcastToViewers(sessionInfo, screenMessage);
+
+        // Cache last screen for new shared viewers & broadcast to shared viewers
+        lastScreenMessages.put(sessionId, screenMessage);
+        broadcastToSharedViewers(sessionId, screenMessage);
     }
 
     public void handleFileView(String sessionId, Message message) {
@@ -232,6 +272,9 @@ public class SessionManager {
 
         viewerSessionMap.remove(wsSession.getId());
         viewerOwnerMap.remove(wsSession.getId());
+
+        // Clean up from shared viewers
+        sharedViewers.values().forEach(viewers -> viewers.remove(wsSession));
     }
 
     /**
@@ -281,6 +324,14 @@ public class SessionManager {
 
     private void broadcastToViewers(SessionInfo sessionInfo, Message message) {
         sessionInfo.getViewers().forEach(viewer -> sendMessage(viewer, message));
+    }
+
+    private void broadcastToSharedViewers(String sessionId, Message message) {
+        Set<WebSocketSession> viewers = sharedViewers.get(sessionId);
+        if (viewers != null) {
+            viewers.removeIf(v -> !v.isOpen());
+            viewers.forEach(v -> sendMessage(v, message));
+        }
     }
 
     private void broadcastSessionStatus(String sessionId, String status) {

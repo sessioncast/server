@@ -5,6 +5,7 @@ import com.tmuxremote.relay.dto.Message;
 import com.tmuxremote.relay.security.JwtTokenProvider;
 import com.tmuxremote.relay.service.AgentTokenService;
 import com.tmuxremote.relay.service.SessionManager;
+import com.tmuxremote.relay.service.ShareLinkValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -27,19 +29,65 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
     private final SessionManager sessionManager;
     private final AgentTokenService agentTokenService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final ShareLinkValidator shareLinkValidator;
 
     // sessionId -> ownerEmail (extracted from token)
     private final Map<String, String> sessionOwnerMap = new ConcurrentHashMap<>();
+
+    // Track which sessions are shared viewers (no input allowed)
+    private final Map<String, Boolean> sharedViewerSessions = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         log.info("WebSocket connected: id={}, remote={}",
                 session.getId(), session.getRemoteAddress());
+
+        // Check for shareToken query parameter
+        try {
+            URI uri = session.getUri();
+            if (uri != null && uri.getQuery() != null) {
+                String shareToken = getQueryParam(uri.getQuery(), "shareToken");
+                if (shareToken != null) {
+                    ShareLinkValidator.ShareLinkInfo info = shareLinkValidator.validate(shareToken);
+                    if (info == null) {
+                        session.close(new CloseStatus(4403, "Invalid share token"));
+                        return;
+                    }
+                    // Register as shared (read-only) viewer
+                    sharedViewerSessions.put(session.getId(), true);
+                    sessionManager.registerSharedViewer(info.getSessionId(), info.getOwnerEmail(), session);
+                    log.info("Shared viewer registered: session={}, shareToken={}...",
+                            info.getSessionId(), shareToken.substring(0, Math.min(6, shareToken.length())));
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to process share token", e);
+        }
+    }
+
+    private String getQueryParam(String query, String paramName) {
+        for (String param : query.split("&")) {
+            String[] pair = param.split("=", 2);
+            if (pair.length == 2 && paramName.equals(pair[0])) {
+                try {
+                    return java.net.URLDecoder.decode(pair[1], "UTF-8");
+                } catch (Exception e) {
+                    return pair[1];
+                }
+            }
+        }
+        return null;
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage textMessage) {
         try {
+            // Shared viewers are read-only — ignore all their messages
+            if (sharedViewerSessions.containsKey(session.getId())) {
+                log.debug("Ignoring message from shared viewer: {}", session.getId());
+                return;
+            }
+
             String payload = textMessage.getPayload();
             Message message = objectMapper.readValue(payload, Message.class);
 
@@ -537,6 +585,7 @@ public class RelayWebSocketHandler extends TextWebSocketHandler {
         sessionManager.handleDisconnect(session);
         sessionManager.handleProjectDisconnect(session);
         sessionOwnerMap.remove(session.getId());
+        sharedViewerSessions.remove(session.getId());
     }
 
     @Override
